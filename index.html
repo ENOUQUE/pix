@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de PIX</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 1rem;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(120deg, #f6d365 0%, #fda085 100%);
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 1rem;
+      max-width: 420px;
+      margin: auto;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      font-weight: bold;
+      transition: 0.3s;
+    }
+    .value-button {
+      background-color: #fb923c;
+      color: white;
+    }
+    .value-button:hover {
+      background-color: #f97316;
+    }
+    .main-button {
+      width: 100%;
+      margin-top: 1rem;
+      background: linear-gradient(to right, #ef4444, #f97316);
+      color: white;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 0.75rem;
+      margin-top: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 0.5rem;
+      resize: none;
+    }
+    .box {
+      background-color: #f9fafb;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-top: 1rem;
+    }
+    h1 {
+      text-align: center;
+      background: linear-gradient(to right, #f97316, #ef4444);
+      -webkit-background-clip: text;
+      color: transparent;
+      font-size: 1.8rem;
+    }
+    footer {
+      text-align: center;
+      color: white;
+      opacity: 0.8;
+      font-size: 0.85rem;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>✨ Gerar PIX ✨</h1>
+    <p style="text-align:center;">Escolha o valor do pagamento.</p>
+
+    <div class="grid">
+      <button class="value-button" id="btn10">R$ 10</button>
+      <button class="value-button" id="btn15">R$ 15</button>
+      <button class="value-button" id="btn30">R$ 30</button>
+    </div>
+
+    <label>Outro valor (R$):</label>
+    <input type="text" id="valor" placeholder="0,00">
+
+    <button class="main-button" id="gerarPixBtn">Gerar PIX</button>
+
+    <div id="qrContainer" class="box" style="display:none;">
+      <h3>QR Code PIX</h3>
+      <img id="qrImage" src="" alt="QR Code PIX" style="width:100%;">
+    </div>
+
+    <div id="copyContainer" class="box" style="display:none;">
+      <h3>PIX Copia e Cola</h3>
+      <textarea id="pixCopiaCola" rows="4" readonly></textarea>
+      <button class="value-button" id="copyBtn">Copiar</button>
+    </div>
+  </div>
+
+  <footer>
+    &copy; <span id="ano"></span> Seu Gerador PIX.
+  </footer>
+
+<script>
+document.getElementById('ano').textContent = new Date().getFullYear();
+
+const valorInput = document.getElementById('valor');
+document.getElementById('btn10').addEventListener('click', () => setValue(10));
+document.getElementById('btn15').addEventListener('click', () => setValue(15));
+document.getElementById('btn30').addEventListener('click', () => setValue(30));
+document.getElementById('gerarPixBtn').addEventListener('click', gerarPix);
+document.getElementById('copyBtn').addEventListener('click', copyPix);
+valorInput.addEventListener('input', () => formatCurrency(valorInput));
+
+function formatCurrency(input) {
+  let value = input.value.replace(/\D/g, '');
+  if (value === '') {
+    input.value = '';
+    return;
+  }
+  value = (parseInt(value) / 100).toFixed(2);
+  input.value = value.replace('.', ',');
+}
+
+function setValue(valor) {
+  valorInput.value = valor.toFixed(2).replace('.', ',');
+}
+
+function gerarPix() {
+  const valorStr = valorInput.value.replace('.', '').replace(',', '.');
+  const valorNum = parseFloat(valorStr);
+
+  if (isNaN(valorNum) || valorNum <= 0) {
+    alert("Insira um valor válido.");
+    return;
+  }
+
+  fetch('https://webhook.pluszap-pro.shop/webhook/webhook-gerar-pix', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ valor: valorNum })
+  })
+  .then(res => res.json())
+  .then(data => {
+    const pix = data.pixCopiaEColaString || data.pixCopiaECola;
+    if (!pix) {
+      alert('Erro ao gerar PIX.');
+      return;
+    }
+
+    document.getElementById('pixCopiaCola').value = pix;
+    document.getElementById('copyContainer').style.display = 'block';
+
+    const qrLink = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(pix)}&size=250x250`;
+    document.getElementById('qrImage').src = qrLink;
+    document.getElementById('qrContainer').style.display = 'block';
+  })
+  .catch(err => {
+    alert('Erro na requisição. ' + err.message);
+    console.error(err);
+  });
+}
+
+function copyPix() {
+  const textarea = document.getElementById('pixCopiaCola');
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(textarea.value)
+        .then(() => alert('Copiado para a área de transferência!'))
+        .catch(() => fallbackCopy(textarea));
+    } else {
+      fallbackCopy(textarea);
+    }
+  } catch {
+    fallbackCopy(textarea);
+  }
+}
+
+function fallbackCopy(el) {
+  el.select();
+  el.setSelectionRange(0, 99999);
+  try {
+    const successful = document.execCommand('copy');
+    if (successful) {
+      alert('Copiado para a área de transferência!');
+    } else {
+      alert('Erro ao copiar.');
+    }
+  } catch (err) {
+    alert('Erro ao copiar.');
+  }
+}
+</script>
+
+</body>
+</html>
